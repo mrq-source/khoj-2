@@ -1,5 +1,5 @@
 const wait = (ms = 450) => new Promise((resolve) => setTimeout(resolve, ms))
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 export const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || `${API_BASE_URL}/ai/analyze`
 
 const doctors = [
@@ -37,29 +37,28 @@ export async function getPatientDashboard() {
   return { consultations, appointments: [{ id: 'a1', doctor: 'Dr. Maya Patel', date: 'Thu, Oct 31', time: '10:30 AM', type: 'Follow-up appointment' }] }
 }
 
-export async function analyzeSymptoms({ symptoms, severity }) {
-  await wait(1500)
-  // Replace this mock response with a request to AI_ENDPOINT when the model service is ready.
-  const level = severity >= 9 ? 'Critical' : severity >= 7 ? 'High' : severity >= 4 ? 'Medium' : 'Low'
-  const summaries = {
-    Critical: 'Your self-reported symptom severity is at the highest level. This prototype cannot assess an emergency; please seek immediate medical advice. If you may be in immediate danger, call your local emergency number.',
-    High: 'Your reported symptoms have been flagged for prompt clinical review. This prototype cannot determine the cause, so please arrange an appointment with a healthcare professional within 24 hours.',
-    Medium: 'Your description may be consistent with a localized skin irritation. This is only an informational overview; an in-person review can help a clinician understand the cause.',
-    Low: 'Your description sounds like a mild skin concern, but this prototype cannot diagnose or rule out a condition. Monitor any changes and consult a clinician if it persists or worsens.',
+export async function analyzeSymptoms({ symptoms, severity, metadata = {}, images }) {
+  if (!images?.length) throw new Error('Upload a skin photo to run the image model.')
+
+  const formData = new FormData()
+  formData.append('image', images[0], images[0].name)
+  formData.append('metadata', JSON.stringify(metadata))
+  formData.append('severity', String(severity))
+
+  const response = await fetch(AI_ENDPOINT, { method: 'POST', body: formData })
+  let result
+  try {
+    result = await response.json()
+  } catch {
+    throw new Error('The model service returned an invalid response. Please try again.')
   }
-  const nextSteps = level === 'Critical'
-    ? ['Seek immediate medical advice rather than relying on this prototype.', 'Call your local emergency number if you may be in immediate danger.', 'Avoid starting new treatments until a qualified clinician has assessed you.']
-    : level === 'High'
-      ? ['Arrange a dermatology appointment within 24 hours.', 'Avoid scratching the area and note any changes while you wait.', 'Seek emergency help if symptoms become severe or rapidly worsen.']
-      : ['Avoid new skincare products and potential irritants for now.', 'Keep the area clean and avoid scratching it.', 'Book a dermatology appointment if symptoms persist or worsen.']
-  return {
-    id: `c-${Date.now()}`,
-    severity: level,
-    summary: summaries[level],
-    causes: ['Contact dermatitis or a mild allergic reaction', 'Eczema or another common inflammatory skin condition', 'Irritation from a new product or fabric'],
-    nextSteps,
-    symptoms,
+  if (!response.ok) {
+    throw new Error(typeof result?.detail === 'string' ? result.detail : 'The model service could not analyze this photo.')
   }
+  if (!result || typeof result !== 'object' || !result.prediction) {
+    throw new Error('The model service returned an incomplete result. Please try again.')
+  }
+  return { ...result, symptoms }
 }
 
 export async function searchDoctors({ query = '', specialization = '', minRating = 0 } = {}) {

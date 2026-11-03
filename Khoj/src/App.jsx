@@ -51,7 +51,7 @@ function LandingPage() {
   return <div className="landing-page"><LandingNav /><main>
     <section className="landing-hero">
       <div className="hero-copy"><div className="hero-pill"><span /> YOUR SKIN HEALTH, IN FOCUS</div><h1>A clearer path to <em>healthier skin.</em></h1><p>Understand what your skin may be telling you. Get thoughtful guidance and connect with a dermatologist when you need one.</p><div className="hero-actions"><Button onClick={() => navigate('/auth?mode=signup')}>Get started for free <ArrowRight size={17} /></Button><button className="watch-link" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><span className="play">▶</span> See how it works</button></div><div className="hero-trust"><div className="trust-avatars"><span>MP</span><span>JW</span><span>AK</span><span>+</span></div><div><strong>Care that starts with listening</strong><small>Personalized guidance, wherever you are</small></div></div></div>
-      <div className="hero-visual"><div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" /><div className="hero-portrait"><img src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=720&q=85" alt="Dermatologist ready to help" /></div><div className="floating-note note-top"><span><Sparkles size={16} /></span><div><strong>A little more clarity</strong><small>Personalized skin insights</small></div></div><div className="floating-note note-bottom"><span className="note-check"><Check size={17} /></span><div><strong>Care you can trust</strong><small>Connect with verified experts</small></div></div><span className="visual-spark spark-a">✳</span><span className="visual-spark spark-b">✳</span></div>
+      <div className="hero-visual"><div className="visual-orbit orbit-one" /><div className="visual-orbit orbit-two" /><div className="hero-portrait"><img src="/hero.png" alt="Dermatologist ready to help" /></div><div className="floating-note note-top"><span><Sparkles size={16} /></span><div><strong>A little more clarity</strong><small>Personalized skin insights</small></div></div><div className="floating-note note-bottom"><span className="note-check"><Check size={17} /></span><div><strong>Care you can trust</strong><small>Connect with verified experts</small></div></div><span className="visual-spark spark-a">✳</span><span className="visual-spark spark-b">✳</span></div>
       <div className="hero-bottom-note"><span className="hero-note-icon"><ShieldCheck size={18} /></span><span><strong>Private by design</strong><small>Your health information stays yours.</small></span></div>
     </section>
     <section id="how-it-works" className="how-section"><div className="center-heading"><span className="eyebrow">A SIMPLE FIRST STEP</span><h2>Skin care that starts with you.</h2><p>Whether you have a question or want expert care, we’ll help you take the next step.</p></div><div className="steps-grid"><Step number="01" icon={ImageIcon} title="Share what you notice" text="Tell us what’s going on and optionally add a photo of the area." /><Step number="02" icon={Sparkles} title="Get helpful insights" text="Receive an AI-assisted overview and practical next steps." /><Step number="03" icon={Stethoscope} title="Connect with a doctor" text="Find the right dermatologist and book a time that works." /></div></section>
@@ -123,25 +123,64 @@ function PatientDashboard({ onConsult }) {
 function Stat({ icon: Icon, color, label, value, foot }) { return <Card className="stat-card"><span className={`stat-icon stat-${color}`}><Icon size={18} /></span><div className="stat-body"><span>{label}</span><strong>{value}</strong><small>{foot}</small></div></Card> }
 function LoadingRows() { return <div className="skeleton-list" aria-label="Loading"><span /><span /><span /></div> }
 
+const modelQuestions = [
+  { key: 'itch', label: 'Itchy?' },
+  { key: 'grew', label: 'Has it grown?' },
+  { key: 'hurt', label: 'Painful?' },
+  { key: 'changed', label: 'Has its appearance changed?' },
+  { key: 'bleed', label: 'Has it bled?' },
+  { key: 'elevation', label: 'Raised or elevated?' },
+  { key: 'skin_cancer_history', label: 'History of skin cancer?' },
+  { key: 'cancer_history', label: 'Cancer history (dataset field)?' },
+]
+const modelRegions = ['ABDOMEN', 'ARM', 'BACK', 'CHEST', 'EAR', 'FACE', 'FOOT', 'FOREARM', 'HAND', 'LIP', 'NECK', 'NOSE', 'SCALP', 'THIGH']
+
 function ConsultationPage({ onResult }) {
   const [files, setFiles] = useState([])
   const [symptoms, setSymptoms] = useState('')
   const [duration, setDuration] = useState('')
   const [severity, setSeverity] = useState(4)
+  const [metadata, setMetadata] = useState({
+    itch: '', grew: '', hurt: '', changed: '', bleed: '', elevation: '',
+    skin_cancer_history: '', cancer_history: '', age: '', diameter_1: '',
+    diameter_2: '', region: '', gender: '',
+  })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const notify = useToast()
+  function updateMetadata(field, value) {
+    setMetadata((current) => ({ ...current, [field]: value }))
+  }
   async function submit(event) {
     event.preventDefault()
+    if (!files.length) { setError('Upload one clear skin photo to run the image model.'); return }
     if (symptoms.trim().length < 10) { setError('Please describe your symptoms in at least 10 characters.'); return }
     setLoading(true); setError('')
-    try { const result = await analyzeSymptoms({ symptoms, severity, duration, images: files.map((item) => item.file) }); onResult(result); navigate('/results') } catch { setError('We couldn’t analyze your information just now. Please try again.'); notify('Your consultation could not be submitted. Please try again.', 'error') } finally { setLoading(false) }
+    try {
+      const result = await analyzeSymptoms({ symptoms, severity, metadata, images: files.map((item) => item.file) })
+      onResult(result)
+      navigate('/results')
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'The model service could not analyze this photo.'
+      setError(message)
+      notify(message, 'error')
+    } finally { setLoading(false) }
   }
-  return <AppShell><div className="flow-page"><button className="back-link" onClick={() => navigate('/dashboard')}><ArrowLeft size={15} /> Back to overview</button><div className="flow-header"><div><span className="eyebrow">NEW CONSULTATION</span><h1>Tell us what you’re noticing.</h1><p>A few details can help us offer more useful guidance.</p></div><div className="step-indicator"><span className="step-active">1</span><i /><span>2</span><i /><span>3</span></div></div>
-    <form className="consult-form" onSubmit={submit}><Card className="form-card"><div className="form-card-heading"><span className="form-number">01</span><div><h2>Add a photo <span className="optional">(optional)</span></h2><p>A clear, well-lit photo can help provide more context.</p></div></div><ImageUploader files={files} onChange={setFiles} /></Card>
-      <Card className="form-card"><div className="form-card-heading"><span className="form-number">02</span><div><h2>Describe your symptoms</h2><p>What are you experiencing? Include where and how it feels.</p></div></div><label className="field"><span className="field-label">Your description</span><textarea className={`input textarea ${error ? 'input-error' : ''}`} rows="5" maxLength="800" value={symptoms} onChange={(event) => { setSymptoms(event.target.value); setError('') }} placeholder="For example: I noticed a small red, itchy patch on my left forearm about 4 days ago…" /><div className="textarea-meta">{error && <span className="field-error">{error}</span>}<small>{symptoms.length}/800</small></div></label><div className="form-grid symptom-fields"><label className="field"><span className="field-label">How long have you had this?</span><select className="input" value={duration} onChange={(event) => setDuration(event.target.value)}><option value="">Select duration</option><option>Less than a day</option><option>1–3 days</option><option>4–7 days</option><option>1–4 weeks</option><option>More than a month</option></select></label><div className="field"><div className="severity-label-row"><span className="field-label">How severe is it?</span><strong>{severity} <small>/ 10</small></strong></div><input className="range-input" type="range" min="1" max="10" value={severity} onChange={(event) => setSeverity(Number(event.target.value))} aria-label={`Severity ${severity} out of 10`} /><div className="range-labels"><span>Mild</span><span>Severe</span></div></div></div></Card>
-      <div className="medical-disclaimer"><span><CircleHelp size={17} /></span><p><strong>A note about your care</strong><br />This is not a medical diagnosis. In an emergency, call your local emergency number.</p></div><div className="form-actions"><span><LockKeyhole size={14} /> Your information is private and secure.</span><Button type="submit" disabled={loading}>{loading ? <><span className="spinner" /> Reviewing your details…</> : <>Submit to AI <Sparkles size={16} /></>}</Button></div>
+  return <AppShell><div className="flow-page"><button className="back-link" onClick={() => navigate('/dashboard')}><ArrowLeft size={15} /> Back to overview</button><div className="flow-header"><div><span className="eyebrow">NEW CONSULTATION</span><h1>Tell us what you’re noticing.</h1><p>Share one photo and optional details for an informational model result.</p></div><div className="step-indicator"><span className="step-active">1</span><i /><span>2</span><i /><span>3</span></div></div>
+    <form className="consult-form" onSubmit={submit}>
+      <Card className="form-card"><div className="form-card-heading"><span className="form-number">01</span><div><h2>Add a photo</h2><p>The model analyzes one clear, well-lit photo. Your photo is not stored by this API.</p></div></div><ImageUploader files={files} onChange={(value) => { setFiles(value); setError('') }} /></Card>
+      <Card className="form-card"><div className="form-card-heading"><span className="form-number">02</span><div><h2>Describe your symptoms</h2><p>Your description stays in this app; the image model uses the photo and optional details below.</p></div></div><label className="field"><span className="field-label">Your description</span><textarea className="input textarea" rows="5" maxLength="800" value={symptoms} onChange={(event) => { setSymptoms(event.target.value); setError('') }} placeholder="For example: I noticed a small red, itchy patch on my left forearm about 4 days ago…" /><div className="textarea-meta"><small>{symptoms.length}/800</small></div></label><div className="form-grid symptom-fields"><label className="field"><span className="field-label">How long have you had this?</span><select className="input" value={duration} onChange={(event) => setDuration(event.target.value)}><option value="">Select duration</option><option>Less than a day</option><option>1–3 days</option><option>4–7 days</option><option>1–4 weeks</option><option>More than a month</option></select></label><div className="field"><div className="severity-label-row"><span className="field-label">How severe is it?</span><strong>{severity} <small>/ 10</small></strong></div><input className="range-input" type="range" min="1" max="10" value={severity} onChange={(event) => setSeverity(Number(event.target.value))} aria-label={`Severity ${severity} out of 10`} /><div className="range-labels"><span>Mild</span><span>Severe</span></div></div></div></Card>
+      <Card className="form-card"><div className="form-card-heading"><span className="form-number">03</span><div><h2>Optional model details</h2><p>These fields match the model’s training data. Leave unknown items blank; the backend applies its training-time defaults.</p></div></div><div className="form-grid">
+        <label className="field"><span className="field-label">Age</span><input className="input" type="number" min="0" max="120" value={metadata.age} onChange={(event) => updateMetadata('age', event.target.value)} placeholder="Years" /></label>
+        <label className="field"><span className="field-label">Lesion diameter 1</span><input className="input" type="number" min="0" max="500" step="0.1" value={metadata.diameter_1} onChange={(event) => updateMetadata('diameter_1', event.target.value)} placeholder="Millimeters" /></label>
+        <label className="field"><span className="field-label">Lesion diameter 2</span><input className="input" type="number" min="0" max="500" step="0.1" value={metadata.diameter_2} onChange={(event) => updateMetadata('diameter_2', event.target.value)} placeholder="Millimeters" /></label>
+        <label className="field"><span className="field-label">Location</span><select className="input" value={metadata.region} onChange={(event) => updateMetadata('region', event.target.value)}><option value="">Not sure / not listed</option>{modelRegions.map((region) => <option key={region} value={region}>{region[0]}{region.slice(1).toLowerCase()}</option>)}</select></label>
+        <label className="field"><span className="field-label">Gender category</span><select className="input" value={metadata.gender} onChange={(event) => updateMetadata('gender', event.target.value)}><option value="">Not provided</option><option value="FEMALE">Female</option><option value="MALE">Male</option></select></label>
+        {modelQuestions.map(({ key, label }) => <label className="field" key={key}><span className="field-label">{label}</span><select className="input" value={metadata[key]} onChange={(event) => updateMetadata(key, event.target.value)}><option value="">Not sure</option><option value="true">Yes</option><option value="false">No</option></select></label>)}
+      </div></Card>
+      {error && <p className="field-error" role="alert">{error}</p>}
+      <div className="medical-disclaimer"><span><CircleHelp size={17} /></span><p><strong>A note about your care</strong><br />This model is informational, not a medical diagnosis. Do not use it to delay care. In an emergency, call your local emergency number.</p></div><div className="form-actions"><span><LockKeyhole size={14} /> Your photo and selected details go to the configured model API.</span><Button type="submit" disabled={loading}>{loading ? <><span className="spinner" /> Reviewing your photo…</> : <>Analyze photo <Sparkles size={16} /></>}</Button></div>
     </form></div></AppShell>
 }
 
@@ -149,9 +188,36 @@ function ResultsPage({ result, onFind, onSearch }) {
   const navigate = useNavigate()
   if (!result) return <Navigate to="/consultation" replace />
   const high = result.severity === 'High' || result.severity === 'Critical'
-  return <AppShell><div className="flow-page results-page"><button className="back-link" onClick={() => navigate('/dashboard')}><ArrowLeft size={15} /> Back to overview</button><div className="results-intro"><span className="results-icon"><Sparkles size={21} /></span><span className="eyebrow">YOUR SKIN INSIGHTS</span><h1>A thoughtful first look.</h1><p>Here’s an AI-assisted overview based on what you shared. It’s a starting point for a conversation—not a diagnosis.</p></div>
-    {high && <div className="urgent-banner"><span><Cross size={17} /></span><div><strong>Prompt medical attention may be appropriate</strong><p>Please contact a healthcare professional soon. If you feel this is an emergency, call your local emergency number.</p></div></div>}
-    <Card className="insights-card"><div className="insights-heading"><div><div className="insights-title"><span className="insights-spark"><Sparkles size={17} /></span><h2>Your AI-assisted overview</h2></div><p>Generated just now · Based on the details you shared</p></div><SeverityBadge level={result.severity} /></div><div className="insight-block"><h3>What we noticed</h3><p>{result.summary}</p></div><div className="insight-columns"><div className="insight-block"><h3>Possible explanations</h3><ul>{result.causes.map((cause) => <li key={cause}><span className="list-check"><Check size={12} /></span>{cause}</li>)}</ul></div><div className="insight-block"><h3>Helpful next steps</h3><ul>{result.nextSteps.map((step) => <li key={step}><span className="list-check"><Check size={12} /></span>{step}</li>)}</ul></div></div><div className="disclaimer-inline"><ShieldCheck size={15} /> This AI-generated content is for informational purposes only and is not a substitute for professional medical advice.</div></Card>
+  return <AppShell><div className="flow-page results-page"><button className="back-link" onClick={() => navigate('/dashboard')}><ArrowLeft size={15} /> Back to overview</button><div className="results-intro"><span className="results-icon"><Sparkles size={21} /></span><span className="eyebrow">YOUR SKIN INSIGHTS</span><h1>A thoughtful first look.</h1><p>{result.prediction ? 'This research image classifier is not a diagnostic tool. Review any concerns with a qualified healthcare professional.' : 'Here’s an AI-assisted overview based on what you shared. It’s a starting point for a conversation—not a diagnosis.'}</p></div>
+    {high && <div className="urgent-banner"><span><Cross size={17} /></span><div><strong>Your self-reported severity suggests prompt medical advice may be appropriate</strong><p>Please contact a healthcare professional soon. If you feel this is an emergency, call your local emergency number.</p></div></div>}
+    <Card className="insights-card">
+      <div className="insights-heading">
+        <div>
+          <div className="insights-title"><span className="insights-spark"><Sparkles size={17} /></span><h2>{result.prediction ? 'Image model result' : 'Your AI-assisted overview'}</h2></div>
+          <p>Generated just now · Based on the details you shared</p>
+        </div>
+        <div className="result-rating"><small>Your rating</small><SeverityBadge level={result.severity} /></div>
+      </div>
+      <div className="insight-block">
+        <h3>{result.prediction ? 'Top model category' : 'What we noticed'}</h3>
+        <p>{result.prediction
+          ? <><strong>{result.prediction.label}</strong> · {Math.round(result.prediction.score * 100)}% model score (not a calibrated probability)</>
+          : result.summary}</p>
+      </div>
+      <div className={`insight-columns ${result.prediction ? 'insight-columns-single' : ''}`}>
+        {!result.prediction && (
+          <div className="insight-block">
+            <h3>Possible explanations</h3>
+            <ul>{result.causes.map((cause) => <li key={cause}><span className="list-check"><Check size={12} /></span>{cause}</li>)}</ul>
+          </div>
+        )}
+        <div className="insight-block">
+          <h3>Helpful next steps</h3>
+          <ul>{result.nextSteps.map((step) => <li key={step}><span className="list-check"><Check size={12} /></span>{step}</li>)}</ul>
+        </div>
+      </div>
+      <div className="disclaimer-inline"><ShieldCheck size={15} /> This model output is informational only, is not a diagnosis, and should not be used to guide treatment.</div>
+    </Card>
     <div className="doctor-choice-heading"><span className="eyebrow">YOUR NEXT STEP</span><h2>Would you like to talk to a dermatologist?</h2><p>Find the right care for you, whenever you’re ready.</p></div><div className="choice-grid"><button className="choice-card" onClick={onFind}><span className="choice-icon choice-green"><MapPin size={21} /></span><span className="choice-card-copy"><strong>Get nearby doctor assistance</strong><small>Find trusted dermatologists near you.</small></span><ArrowRight size={18} /></button><button className="choice-card" onClick={onSearch}><span className="choice-icon choice-blue"><Search size={20} /></span><span className="choice-card-copy"><strong>Search for a doctor by name</strong><small>Already have someone in mind?</small></span><ArrowRight size={18} /></button></div></div></AppShell>
 }
 
