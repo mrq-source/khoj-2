@@ -45,7 +45,20 @@ export async function analyzeSymptoms({ symptoms, severity, metadata = {}, image
   formData.append('metadata', JSON.stringify(metadata))
   formData.append('severity', String(severity))
 
-  const response = await fetch(AI_ENDPOINT, { method: 'POST', body: formData })
+  let response
+  try {
+    response = await fetch(AI_ENDPOINT, { method: 'POST', body: formData })
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        `Cannot reach the model API at ${AI_ENDPOINT}. Start the backend from the Khoj folder with: `
+        + 'python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000. '
+        + 'Check that its Python dependencies are installed and that CORS allows this app.',
+        { cause: error },
+      )
+    }
+    throw error
+  }
   let result
   try {
     result = await response.json()
